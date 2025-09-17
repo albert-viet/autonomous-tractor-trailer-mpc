@@ -8,8 +8,8 @@ tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
 Np = 50;   % prediction horizon
-Qx = diag([1, 1, 10]);   % state weights (same ordering e_y,e_psi,e_psi_t)
-Ru = 2;                   % control move weight (on u_dev)
+Qx = diag([8.2049, 0.19506, 0.25954]);   % state weights (same ordering e_y,e_psi,e_psi_t)
+Ru = 0.082207;                   % control move weight (on u_dev)
 regularization = 1e-6;
 u_prev = 0.0;
 max_rate = 1.2;            % maximum steering rate (rad/s)
@@ -54,7 +54,7 @@ delta_act = zeros(Tsim+1,1);
 x_t_act = zeros(Tsim+1,1); y_t_act = zeros(Tsim+1,1);
 
 % tractor and trailer initial pose
-x_act(1)=0.0; y_act(1)=0.0; psi_act(1)=0.0; psi_t_act(1)=0.0; delta_act(1)=0.0;
+x_act(1)=0.2; y_act(1)=0.4; psi_act(1)=0.0; psi_t_act(1)=0.0; delta_act(1)=0.0;
 x_t_act(1) = x_act(1) - lt1*cos(psi_t_act(1)) - m0*cos(psi_act(1));
 y_t_act(1) = y_act(1) - lt1*sin(psi_t_act(1)) - m0*sin(psi_act(1));
 
@@ -186,10 +186,56 @@ for k = 1:Tsim
     e_y = -sin(psir)*dxp + cos(psir)*dyp;
     e_psi = wrapToPi(psi_act(idx_next) - psir);
     e_psi_t = wrapToPi(psi_t_act(idx_next) - psi_ref_i(idx_next));
-%     e_delta = delta_act(idx_next) - delta_r_profile(idx_next);
 
     x_err = [e_y; e_psi; e_psi_t; delta_act(idx_next)];
     history_err(:, idx_next) = x_err;
+end
+
+%% tractor-trailer trajectory tracking animation
+
+figure; hold on; axis equal; grid on; title('Tractor and trailer tracking animation'); xlabel('x [m]'); ylabel('y [m]');
+% for k = 1:Tsim
+%     plot(x_act(1:k), y_act(1:k), 'b-', x_t_act(1:k), y_t_act(1:k), 'r-', 'LineWidth', 1.5);
+%     plot(x_ref, y_ref, 'k--', 'LineWidth', 1.5);
+%     legend('tractor','trailer','ref');
+%     drawnow; pause(0.01);
+% end
+%% tractor-trailer trajectory tracking animation
+figure; hold on; axis equal; grid on;
+title('Tractor and trailer tracking animation'); 
+xlabel('x [m]'); ylabel('y [m]');
+
+% kích thước xe
+L_tr = 2.9; W_tr = 2.0;
+L_t  = 1.8; W_t = 2.2;
+
+for k = 1:10:Tsim
+    cla;
+    % reference
+    plot(x_ref, y_ref, 'k--', 'LineWidth', 1.5); hold on;
+    
+    % plot trajectory 
+    plot(x_act(1:k), y_act(1:k), 'b-', 'LineWidth', 1.2);
+    plot(x_t_act(1:k), y_t_act(1:k), 'r-', 'LineWidth', 1.2);
+
+    % tractor
+    tractor_corners = rectangleCorners(x_act(k), y_act(k), psi_act(k), L_tr, W_tr);
+    fill(tractor_corners(1,:), tractor_corners(2,:), 'b', 'FaceAlpha',0.3);
+
+    % trailer
+    trailer_corners = rectangleCorners(x_t_act(k), y_t_act(k), psi_t_act(k), L_t, W_t);
+    fill(trailer_corners(1,:), trailer_corners(2,:), 'r', 'FaceAlpha',0.3);
+
+    % draw hitch line
+    hitch_tractor = [x_act(k) - m0*cos(psi_act(k));
+                     y_act(k) - m0*sin(psi_act(k))];
+    hitch_trailer = [x_t_act(k) + lt1*cos(psi_t_act(k));
+                     y_t_act(k) + lt1*sin(psi_t_act(k))];
+    plot([hitch_tractor(1), hitch_trailer(1)], ...
+         [hitch_tractor(2), hitch_trailer(2)], 'k-', 'LineWidth',2);
+
+    legend('ref','tractor path','trailer path','tractor','trailer','hitch');
+    drawnow;
 end
 
 %% Plot results
@@ -236,3 +282,15 @@ function [Ad, Bd, Cd, Wd] = tustin(A,B,W,dt)
           0, 0, 1, 0];
     Wd = (I - 0.5*dt*A) \ (W * dt);
 end
+
+function corners = rectangleCorners(xc, yc, psi, L, W)
+    % local coordinates (centered at vehicle center)
+    corners_local = [ L/2,  W/2;
+                      L/2, -W/2;
+                     -L/2, -W/2;
+                     -L/2,  W/2]';
+    R = [cos(psi), -sin(psi);
+         sin(psi),  cos(psi)];
+    corners = R * corners_local + [xc; yc];
+end
+
