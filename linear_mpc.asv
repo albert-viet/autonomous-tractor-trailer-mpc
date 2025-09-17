@@ -1,19 +1,19 @@
 % Autonomous car-pulling trailer using linear model predictive control
 clear; close all; clc;
 
-%% --- model parameters ---
+%% --- model parameters (same as yours) ---
 tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 
 %% sampling
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
 Np = 50;   % prediction horizon
-Qx = diag([1, 1, 10]);   % state weights (same ordering e_y,e_psi,e_psi_t)
+Qx = diag([1, 1, 5]);   % state weights (same ordering e_y,e_psi,e_psi_t)
 Ru = 2;                   % control move weight (on u_dev)
 regularization = 1e-6;
 u_prev = 0.0;
 max_rate = 1.2;            % maximum steering rate (rad/s)
-%% Reference generation
+%% Reference generation (same as LQR script)
 timeSpan = 20; timeStep = 0.005;
 t_ref = (0:timeStep:timeSpan)';
 x_a_r = t_ref * 2 * 20 / timeSpan;
@@ -112,15 +112,13 @@ for k = 1:Tsim
     Gamma_Y  = kron(eye(Np), Cd) * Gamma;
     GammaW_Y = kron(eye(Np), Cd) * GammaW;
 
+   
     % formulate QP: min_z 1/2 z'H z + f' z , z = [u_dev(0); ...; u_dev(Np-1)]
     % cost: sum_{i} x_i' Qx x_i + sum_{i} u_i' Ru u_i
-%     H = 2*(Gamma' * Qbar * Gamma + Rbar) + regularization*eye(nu*Np);
-%     H = (H + H')/2;   % ensure H is symmetric
-%     f = 2*(Gamma' * Qbar * (Phi * x_err + GammaW));
-    H = 2*(Gamma_Y' * Qbar * Gamma_Y + Rbar) + regularization*eye(nu*Np);
+    H = 2*(Gamma' * Qbar * Gamma + Rbar) + regularization*eye(nu*Np);
     H = (H + H')/2;   % ensure H is symmetric
-    f = 2*(Gamma_Y' * Qbar * (Phi_Y * x_err + GammaW_Y));
-    
+    f = 2*(Gamma' * Qbar * (Phi * x_err + GammaW));
+
     % input bounds on u_dev: u_dev ∈ [umin - delta_r, umax - delta_r]
     lb = repmat(umin, Np, 1);
     ub = repmat(umax, Np, 1);
