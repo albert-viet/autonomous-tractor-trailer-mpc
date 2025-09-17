@@ -8,11 +8,11 @@ tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
 Np = 50;   % prediction horizon
-Qx = diag([5, 5, 5, 1]);   % state weights (same ordering e_y,e_psi,e_psi_t,delta)
+Qx = diag([1, 1, 10, 1]);   % state weights (same ordering e_y,e_psi,e_psi_t,delta)
 Ru = 0.1;                   % control move weight (on u_dev)
 regularization = 1e-6;
 u_prev = 0.0;
-max_rate = 2.0;            % maximum steering rate (rad/s)
+max_rate = 1.25;            % maximum steering rate (rad/s)
 %% Reference generation (same as LQR script)
 timeSpan = 20; timeStep = 0.005;
 t_ref = (0:timeStep:timeSpan)';
@@ -154,7 +154,7 @@ for k = 1:Tsim
         u_cmd_sat = min(max(u_cmd, umin), umax);
     end
     u_hist(k) = u_cmd_sat;
-
+    
     % propagate nonlinear states
     psi_dot = (vr * tan(delta_act(k))) / lr1;
     psi_t_dot = (vr/lt1)*sin(psi_act(k)-psi_t_act(k)) - (m0*vr/(lr1*lt1))*cos(psi_act(k)-psi_t_act(k))*tan(delta_act(k));
@@ -194,16 +194,19 @@ plot(x_t_act, y_t_act, 'r-','LineWidth',1.5);
 title('Reference and Actual Trajectory'); xlabel('x [m]'); ylabel('y [m]'); axis equal; grid on; legend('ref','tractor','trailer');
 
 subplot(2,2,2);
-plot(t_ctrl, history_err(1,:), 'LineWidth',1.2);
+plot(t_ctrl, history_err(1,:), 'LineWidth',1.5);
 title('Tractor lateral error [m]'); xlabel('t [s]'); ylabel('y [m]'); grid on; legend('e_{y}');
 
 subplot(2,2,3);
-plot(t_ctrl, history_err(2,:), 'LineWidth',1.2); hold on; plot(t_ctrl, history_err(3,:),'--','LineWidth',1.2);
+plot(t_ctrl, history_err(2,:), 'LineWidth',1.5); hold on; plot(t_ctrl, history_err(3,:),'--','LineWidth',1.5);
 title('Tractor and trailer yaw error [rad]'); xlabel('t [s]'); ylabel('rad'); grid on; legend('e_\psi','e_{\psi_t}');
 
 subplot(2,2,4);
-plot(t_ctrl(1:end-1), u_hist, 'LineWidth',1.2);
-title('Steering control command [rad]'); xlabel('t [s]'); ylabel('rad'); grid on;
+hold on
+plot(t_ctrl(1:end-1), u_hist, 'LineWidth',1.5);
+plot(t_ctrl(1:end-1), umax*ones(size(t_ctrl(1:end-1))), 'r--', 'LineWidth', 1.5);
+plot(t_ctrl(1:end-1), umin*ones(size(t_ctrl(1:end-1))), 'r--', 'LineWidth', 1.5);
+title('Steering control command [rad]'); xlabel('t [s]'); ylabel('rad'); legend('u_{cmd}','u_{max}','u_{min}'); grid on;
 
 %% --- helper functions ---
 function [A, B, W] = linearSys(vr, k, delta_r, m0, lr1, lt1, tau)
