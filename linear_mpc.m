@@ -1,6 +1,4 @@
-% mpc_tracker.m
-% Trajectory tracking using linear MPC (linearize with your linearSys + Tustin, solve QP with quadprog)
-
+% Autonomous car-pulling trailer using linear model predictive control
 clear; close all; clc;
 
 %% --- model parameters (same as yours) ---
@@ -8,13 +6,13 @@ tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 
 %% sampling
 dt = 0.03; umax = 0.52; umin = -umax;
-
 %% MPC tuning
 Np = 50;   % prediction horizon
 Qx = diag([5, 5, 5, 1]);   % state weights (same ordering e_y,e_psi,e_psi_t,delta)
 Ru = 0.1;                   % control move weight (on u_dev)
 regularization = 1e-6;
-
+u_prev = 0.0;
+max_rate = 2.0;            % maximum steering rate (rad/s)
 %% Reference generation (same as LQR script)
 timeSpan = 20; timeStep = 0.005;
 t_ref = (0:timeStep:timeSpan)';
@@ -89,8 +87,11 @@ for k = 1:Tsim
     Gamma = zeros(nx*Np, nu*Np);
     GammaW = zeros(nx*Np,1);
     Ad_power = eye(nx);
-    % iterative construction
     
+    % Build linear inequality constraints lb <= AU <= ub
+    Aineq = zeros(Np+Np, nu*Np);
+    
+    % iterative construction
     for i = 1:Np
         Ad_power = Ad_power * Ad;       % Ad^i
         Phi((i-1)*nx+1:i*nx,:) = Ad_power;
@@ -116,13 +117,28 @@ for k = 1:Tsim
     % input bounds on u_dev: u_dev ∈ [umin - delta_r, umax - delta_r]
     lb = repmat(umin, Np, 1);
     ub = repmat(umax, Np, 1);
+    
+    % input bounds on (u-udev)
+    bineq = zeros(2*Np, 1);
+    
+    % defining linear inequality constraints
+    for i = 1:Np
+        if i == 1
+            Aineq(1:2,1) = [1; -1];
+            bineq(1:2)   = [u_prev + max_rate*dt;
+                            -u_prev + max_rate*dt];
+        else
+            Aineq(2*i-1:2*i, i-1:i) = [1 -1; -1 1];
+            bineq(2*i-1:2*i)        = [max_rate*dt; max_rate*dt];
+        end
+    end
 
     opts = optimoptions('quadprog','Display','off','TolFun',1e-6);
-    [zopt,~,exitflag] = quadprog(H, f, [], [], [], [], lb, ub, [], opts);
+    [zopt,~,exitflag] = quadprog(H, f, Aineq, bineq, [], [], lb, ub, [], opts);
     if exitflag ~= 1 && exitflag ~= 0
         % fallback to saturated LQR if QP fails
         disp('OSQP fail')
-        warning('quadprog did not converge at step %d (flag=%d). Using saturated LQR fallback.', k, exitflag);
+        warning('quadprog did not converge at step %d (flag=%d). Using saturated LQR fallback.', k, exitflag)
         [A_lin, B_lin, W_lin] = linearSys(vr, kappa, delta_r, m0, lr1, lt1, tau);
         Kfb = lqr(A_lin,B_lin,Qx,Ru);
         u_dev = -Kfb * x_err;
@@ -131,6 +147,9 @@ for k = 1:Tsim
     else
         u_dev_opt = zopt(1:nu);  % only use first control move
         disp(u_dev_opt)
+        % assign previous cmd
+        u_prev = u_dev_opt;
+        
         u_cmd = u_dev_opt + delta_r;
         u_cmd_sat = min(max(u_cmd, umin), umax);
     end
