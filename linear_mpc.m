@@ -8,8 +8,8 @@ tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
 Np = 50;   % prediction horizon
-Qx = diag([8.2049, 0.19506, 0.25954]);   % state weights (same ordering e_y,e_psi,e_psi_t)
-Ru = 0.082207;                   % control move weight (on u_dev)
+Qx = diag([9.3706, 1.2718, 0.10021]);   % state weights (same ordering e_y,e_psi,e_psi_t)
+Ru = 0.3821;                   % control move weight (on u_dev)
 regularization = 1e-6;
 u_prev = 0.0;
 max_rate = 1.2;            % maximum steering rate (rad/s)
@@ -119,7 +119,7 @@ for k = 1:Tsim
 %     f = 2*(Gamma' * Qbar * (Phi * x_err + GammaW));
     H = 2*(Gamma_Y' * Qbar * Gamma_Y + Rbar) + regularization*eye(nu*Np);
     H = (H + H')/2;   % ensure H is symmetric
-    f = 2*(Gamma_Y' * Qbar * (Phi_Y * x_err + GammaW_Y));
+    f = 2*(Gamma_Y' * Qbar * (Phi_Y * x_err + GammaW_Y)) - 2*Rbar * kron(ones(Np,1), delta_r);
     
     % input bounds on u_dev: u_dev ∈ [umin - delta_r, umax - delta_r]
     lb = repmat(umin, Np, 1);
@@ -152,13 +152,12 @@ for k = 1:Tsim
         u_cmd = min(max(u_dev + delta_r, umin), umax);
         u_cmd_sat = u_cmd;
     else
-        u_dev_opt = zopt(1:nu);  % only use first control move
-        disp(u_dev_opt)
-        % assign previous cmd
-        u_prev = u_dev_opt;
-        
-        u_cmd = u_dev_opt + delta_r;
+        u_opt = zopt(1:nu);  % only use first control move
+        disp(u_opt)     
+        u_cmd = u_opt;
         u_cmd_sat = min(max(u_cmd, umin), umax);
+        % assign previous cmd   
+        u_prev = u_opt;
     end
     u_hist(k) = u_cmd_sat;
     
@@ -193,7 +192,7 @@ end
 
 %% tractor-trailer trajectory tracking animation
 
-figure; hold on; axis equal; grid on; title('Tractor and trailer tracking animation'); xlabel('x [m]'); ylabel('y [m]');
+% figure; hold on; axis equal; grid on; title('Tractor and trailer tracking animation'); xlabel('x [m]'); ylabel('y [m]');
 % for k = 1:Tsim
 %     plot(x_act(1:k), y_act(1:k), 'b-', x_t_act(1:k), y_t_act(1:k), 'r-', 'LineWidth', 1.5);
 %     plot(x_ref, y_ref, 'k--', 'LineWidth', 1.5);
@@ -207,7 +206,7 @@ xlabel('x [m]'); ylabel('y [m]');
 
 % kích thước xe
 L_tr = 2.9; W_tr = 2.0;
-L_t  = 1.8; W_t = 2.2;
+L_t  = 1.8; W_t = 2.0;
 
 for k = 1:10:Tsim
     cla;
