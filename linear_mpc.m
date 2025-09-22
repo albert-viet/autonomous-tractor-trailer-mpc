@@ -59,10 +59,21 @@ x_t_act(1) = x_act(1) - lt1*cos(psi_t_act(1)) - m0*cos(psi_act(1));
 y_t_act(1) = y_act(1) - lt1*sin(psi_t_act(1)) - m0*sin(psi_act(1));
 
 % initial error (Frenet)
-dx0 = x_act(1) - x_ref(1); dy0 = y_act(1) - y_ref(1);
-e_x0 =  cos(psi_ref_i(1))*dx0 + sin(psi_ref_i(1))*dy0;
-e_y0 = -sin(psi_ref_i(1))*dx0 + cos(psi_ref_i(1))*dy0;
-x_err = [ e_y0; wrapToPi(psi_act(1)-psi_ref_i(1)); wrapToPi(psi_t_act(1)-psi_ref_i(1)); delta_act(1)];
+% dx0 = x_act(1) - x_ref(1); dy0 = y_act(1) - y_ref(1);
+% e_x0 =  cos(psi_ref_i(1))*dx0 + sin(psi_ref_i(1))*dy0;
+% e_y0 = -sin(psi_ref_i(1))*dx0 + cos(psi_ref_i(1))*dy0;
+% x_err = [ e_y0; wrapToPi(psi_act(1)-psi_ref_i(1)); wrapToPi(psi_t_act(1)-psi_ref_i(1)); delta_act(1)];
+[xproj_tr, yproj_tr, psi_ref_tr, k_tr_init, delta_r_tr_init, idx_tr_init] = projectRefPoint(x_act(1), y_act(1), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
+[xproj_tl, yproj_tl, psi_ref_tl, k_tl_init, delta_r_tl_init, idx_tl_init] = projectRefPoint(x_t_act(1), y_t_act(1), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
+
+dx0 = x_act(1) - xproj_tr; dy0 = y_act(1) - yproj_tr;
+e_y0 = -sin(psi_ref_tr)*dx0 + cos(psi_ref_tr)*dy0;
+e_psi0 = wrapToPi(psi_act(1) - psi_ref_tr);
+e_psi_t0 = wrapToPi(psi_t_act(1) - psi_ref_tl);
+x_err = [e_y0; e_psi0; e_psi_t0; delta_act(1)];
+% keep previous projection indices to accelerate next searches (optional)
+last_idx_tr = idx_tr_init;
+last_idx_tl = idx_tl_init;
 
 history_err = zeros(4, Tsim+1); history_err(:,1) = x_err;
 u_hist = zeros(Tsim,1);
@@ -74,12 +85,13 @@ Rbar = kron(eye(Np), Ru);
 
 %% Main MPC loop
 for k = 1:Tsim
-    vr = v_profile(k);
-    kappa = k_profile(k);
-    delta_r = delta_r_profile(k);
+    % project tractor & trailer current positions to reference
+    [xproj_tr, yproj_tr, psi_ref_tr, k_truck, delta_r_truck, last_idx_tr] = projectRefPoint(x_act(k), y_act(k), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
+    [xproj_tl, yproj_tl, psi_ref_tl, k_trailer, delta_r_tl, last_idx_tl] = projectRefPoint(x_t_act(k), y_t_act(k), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
 
-    % linearize (analytic) and discretize (Tustin)
-    [A,B,W] = linearSys(vr, kappa, delta_r, m0, lr1, lt1, tau);
+    vr = v_profile(k); % vehicle speed (still taken from profile)
+    % linearize using truck curvature for tractor part and trailer curvature for trailer feedforward
+    [A,B,W] = linearSys(vr, k_truck, delta_r_truck, psi_ref_tr, psi_ref_tl, m0, lr1, lt1, tau);
     [Ad, Bd, Cd, Wd] = tustin(A,B,W,dt);
 
     % Build prediction matrices Phi, Gamma, GammaW
@@ -119,7 +131,7 @@ for k = 1:Tsim
 %     f = 2*(Gamma' * Qbar * (Phi * x_err + GammaW));
     H = 2*(Gamma_Y' * Qbar * Gamma_Y + Rbar) + regularization*eye(nu*Np);
     H = (H + H')/2;   % ensure H is symmetric
-    f = 2*(Gamma_Y' * Qbar * (Phi_Y * x_err + GammaW_Y)) - 2*Rbar * kron(ones(Np,1), delta_r);
+    f = 2*(Gamma_Y' * Qbar * (Phi_Y * x_err + GammaW_Y)) - 2*Rbar * kron(ones(Np,1), delta_r_truck);
     
     % input bounds on u_dev: u_dev ∈ [umin - delta_r, umax - delta_r]
     lb = repmat(umin, Np, 1);
@@ -177,17 +189,18 @@ for k = 1:Tsim
     y_t_act(k+1) = y_act(k+1) - lr1*sin(psi_t_act(k+1)) - m0*sin(psi_act(k+1));
 
     % update error (Frenet) at next timestep
-    idx_next = k+1;
-    dxp = x_act(idx_next) - x_ref(idx_next);
-    dyp = y_act(idx_next) - y_ref(idx_next);
-    psir = psi_ref_i(idx_next);
-    e_x =  cos(psir)*dxp + sin(psir)*dyp;
-    e_y = -sin(psir)*dxp + cos(psir)*dyp;
-    e_psi = wrapToPi(psi_act(idx_next) - psir);
-    e_psi_t = wrapToPi(psi_t_act(idx_next) - psi_ref_i(idx_next));
+    % project new positions (tractor & trailer) onto reference
+    [xproj_tr_p, yproj_tr_p, psi_ref_tr_p, ~, ~, last_idx_tr] = projectRefPoint(x_act(k+1), y_act(k+1), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
+    [xproj_tl_p, yproj_tl_p, psi_ref_tl_p, ~, ~, last_idx_tl] = projectRefPoint(x_t_act(k+1), y_t_act(k+1), x_ref, y_ref, psi_ref_i, k_profile, delta_r_profile);
 
-    x_err = [e_y; e_psi; e_psi_t; delta_act(idx_next)];
-    history_err(:, idx_next) = x_err;
+    dxp = x_act(k+1) - xproj_tr_p; dyp = y_act(k+1) - yproj_tr_p;
+    e_y = -sin(psi_ref_tr_p)*dxp + cos(psi_ref_tr_p)*dyp;
+    e_psi = wrapToPi(psi_act(k+1) - psi_ref_tr_p);
+    e_psi_t = wrapToPi(psi_t_act(k+1) - psi_ref_tl_p);
+
+    x_err = [e_y; e_psi; e_psi_t; delta_act(k+1)];
+    history_err(:, k+1) = x_err;
+
 end
 
 %% tractor-trailer trajectory tracking animation
@@ -261,15 +274,20 @@ plot(t_ctrl(1:end-1), umin*ones(size(t_ctrl(1:end-1))), 'r--', 'LineWidth', 1.5)
 title('Steering control command [rad]'); xlabel('t [s]'); ylabel('rad'); legend('u_{cmd}','u_{max}','u_{min}'); grid on;
 
 %% --- helper functions ---
-function [A, B, W] = linearSys(vr, k, delta_r, m0, lr1, lt1, tau)
+function [A, B, W] = linearSys(vr, k, delta_r, psi_ref, psi_t_ref, m0, lr1, lt1, tau)
+    % util variables
     cos_delta_squared = cos(delta_r)^2;
+    delta_yaw = psi_ref - psi_t_ref;
+    e_psi_term = cos(delta_yaw) + (m0/lr1)*sin(delta_yaw)*tan(delta_r);
+    e1 = (2*vr/lt1)*e_psi_term;
+    
     A = [0, vr    , 0      , 0;
          0, 0     , 0      , vr/(lr1*cos_delta_squared);
-         0, vr/lt1, -vr/lt1, -m0*vr/(lr1*lt1*cos_delta_squared);
+         0, e1    , -e1    , -m0*vr*cos(delta_yaw)/(lr1*lt1*cos_delta_squared);
          0, 0     , 0      , -1/tau];
     B = [0;0;0;1/tau];
     w1 = (vr/lr1)*(tan(delta_r) - delta_r/cos_delta_squared);
-    W = [0; -k*vr + w1; (m0/lt1)*(k*vr - w1); 0];
+    W = [0; -k*vr + w1; 0; 0];
 end
 
 function [Ad, Bd, Cd, Wd] = tustin(A,B,W,dt)
@@ -282,6 +300,39 @@ function [Ad, Bd, Cd, Wd] = tustin(A,B,W,dt)
     Wd = (I - 0.5*dt*A) \ (W * dt);
 end
 
+% function [xproj, yproj, psi_interp, kappa_interp, delta_interp, idx] = projectRefPoint(xv, yv, x_ref, y_ref, psi_ref_arr, kappa_arr, delta_arr)
+%     % Project point (xv,yv) onto polyline given by (x_ref,y_ref).
+%     % Returns projected point coords, interpolated psi (wrapped), kappa, delta, and base index.
+%     d2 = (x_ref - xv).^2 + (y_ref - yv).^2;
+%     [~, idx0] = min(d2);
+%     N = numel(x_ref);
+%     % choose neighbouring point to form a segment
+%     if idx0 < N
+%         i1 = idx0; i2 = idx0+1;
+%     else
+%         i1 = idx0-1; i2 = idx0;
+%     end
+%     p1 = [x_ref(i1); y_ref(i1)];
+%     p2 = [x_ref(i2); y_ref(i2)];
+%     v = p2 - p1;
+%     if norm(v) < 1e-8
+%         tproj = 0;
+%     else
+%         tproj = dot([xv; yv] - p1, v) / dot(v, v);
+%         tproj = min(max(tproj, 0), 1);
+%     end
+%     proj = p1 + tproj * v;
+%     xproj = proj(1); yproj = proj(2);
+%     % interpolate psi carefully (shortest angle)
+%     psi1 = psi_ref_arr(i1); psi2 = psi_ref_arr(i2);
+%     dpsi = wrapToPi(psi2 - psi1);
+%     psi_interp = wrapToPi(psi1 + tproj * dpsi);
+%     kappa_interp = (1-tproj)*kappa_arr(i1) + tproj*kappa_arr(i2);
+%     delta_interp = (1-tproj)*delta_arr(i1) + tproj*delta_arr(i2);
+%     idx = i1;
+% end
+
+
 function corners = rectangleCorners(xc, yc, psi, L, W)
     % local coordinates (centered at vehicle center)
     corners_local = [ L/2,  W/2;
@@ -292,4 +343,3 @@ function corners = rectangleCorners(xc, yc, psi, L, W)
          sin(psi),  cos(psi)];
     corners = R * corners_local + [xc; yc];
 end
-
