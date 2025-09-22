@@ -300,37 +300,37 @@ function [Ad, Bd, Cd, Wd] = tustin(A,B,W,dt)
     Wd = (I - 0.5*dt*A) \ (W * dt);
 end
 
-% function [xproj, yproj, psi_interp, kappa_interp, delta_interp, idx] = projectRefPoint(xv, yv, x_ref, y_ref, psi_ref_arr, kappa_arr, delta_arr)
-%     % Project point (xv,yv) onto polyline given by (x_ref,y_ref).
-%     % Returns projected point coords, interpolated psi (wrapped), kappa, delta, and base index.
-%     d2 = (x_ref - xv).^2 + (y_ref - yv).^2;
-%     [~, idx0] = min(d2);
-%     N = numel(x_ref);
-%     % choose neighbouring point to form a segment
-%     if idx0 < N
-%         i1 = idx0; i2 = idx0+1;
-%     else
-%         i1 = idx0-1; i2 = idx0;
-%     end
-%     p1 = [x_ref(i1); y_ref(i1)];
-%     p2 = [x_ref(i2); y_ref(i2)];
-%     v = p2 - p1;
-%     if norm(v) < 1e-8
-%         tproj = 0;
-%     else
-%         tproj = dot([xv; yv] - p1, v) / dot(v, v);
-%         tproj = min(max(tproj, 0), 1);
-%     end
-%     proj = p1 + tproj * v;
-%     xproj = proj(1); yproj = proj(2);
-%     % interpolate psi carefully (shortest angle)
-%     psi1 = psi_ref_arr(i1); psi2 = psi_ref_arr(i2);
-%     dpsi = wrapToPi(psi2 - psi1);
-%     psi_interp = wrapToPi(psi1 + tproj * dpsi);
-%     kappa_interp = (1-tproj)*kappa_arr(i1) + tproj*kappa_arr(i2);
-%     delta_interp = (1-tproj)*delta_arr(i1) + tproj*delta_arr(i2);
-%     idx = i1;
-% end
+function [xproj, yproj, psi_interp, kappa_interp, delta_interp, idx] = projectRefPoint(xv, yv, x_ref, y_ref, psi_ref_arr, kappa_arr, delta_arr)
+    % Project point (xv,yv) onto polyline given by (x_ref,y_ref).
+    % Returns projected point coords, interpolated psi (wrapped), kappa, delta, and base index.
+    d2 = (x_ref - xv).^2 + (y_ref - yv).^2;
+    [~, idx0] = min(d2);
+    N = numel(x_ref);
+    % choose neighbouring point to form a segment
+    if idx0 < N
+        i1 = idx0; i2 = idx0+1;
+    else
+        i1 = idx0-1; i2 = idx0;
+    end
+    p1 = [x_ref(i1); y_ref(i1)];
+    p2 = [x_ref(i2); y_ref(i2)];
+    v = p2 - p1;
+    if norm(v) < 1e-8
+        tproj = 0;
+    else
+        tproj = dot([xv; yv] - p1, v) / dot(v, v);
+        tproj = min(max(tproj, 0), 1);
+    end
+    proj = p1 + tproj * v;
+    xproj = proj(1); yproj = proj(2);
+    % interpolate psi carefully (shortest angle)
+    psi1 = psi_ref_arr(i1); psi2 = psi_ref_arr(i2);
+    dpsi = wrapToPi(psi2 - psi1);
+    psi_interp = wrapToPi(psi1 + tproj * dpsi);
+    kappa_interp = (1-tproj)*kappa_arr(i1) + tproj*kappa_arr(i2);
+    delta_interp = (1-tproj)*delta_arr(i1) + tproj*delta_arr(i2);
+    idx = i1;
+end
 
 
 function corners = rectangleCorners(xc, yc, psi, L, W)
