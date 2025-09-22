@@ -8,17 +8,56 @@ tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
 Np = 50;   % prediction horizon
-Qx = diag([9.3706, 1.2718, 0.10021]);   % state weights (same ordering e_y,e_psi,e_psi_t)
-Ru = 0.3821;                   % control move weight (on u_dev)
+% Qx = diag([9.3706, 1.2718, 0.10021]);   % state weights (same ordering e_y,e_psi,e_psi_t)
+% Ru = 0.3821;                   % control move weight (on u_dev)
+Qx = diag([10, 5, 0.1]);
+Ru = 0.5;
 regularization = 1e-6;
 u_prev = 0.0;
 max_rate = 1.2;            % maximum steering rate (rad/s)
 %% Reference generation
-timeSpan = 20; timeStep = 0.005;
+timeSpan = 60; timeStep = 0.005;
 t_ref = (0:timeStep:timeSpan)';
-x_a_r = t_ref * 2 * 20 / timeSpan;
-Rparam = 20; alpha_l = 12; c = 10;
-y_a_r = c * (exp(-log(2) * (x_a_r./Rparam).^alpha_l) - 1);
+% x_a_r = t_ref * 2 * 20 / timeSpan;
+% Rparam = 20; alpha_l = 12; c = 10;
+% y_a_r = c * (exp(-log(2) * (x_a_r./Rparam).^alpha_l) - 1);
+
+% Allocate reference
+x_a_r = zeros(size(t_ref));
+y_a_r = zeros(size(t_ref));
+psi_ref = zeros(size(t_ref));
+v_ref = zeros(size(t_ref));
+
+% ---- Phase 1: t = [0,3] ----
+idx1 = t_ref <= 3;
+t1 = t_ref(idx1);
+vr1 = 0.1 + 0.9 * sin(pi * t1 / 6);           % longitudinal velocity
+x1 = cumtrapz(t1, vr1);                        % integrate to get x
+y1 = zeros(size(t1));
+psi1 = zeros(size(t1));                        % heading constant 0
+
+x_a_r(idx1) = x1;
+y_a_r(idx1) = y1;
+psi_ref(idx1) = psi1;
+v_ref(idx1) = vr1;
+
+% ---- Phase 2: t = [3,43] ----
+idx2 = t_ref > 3;
+t2 = t_ref(idx2);
+x2 = t2 - 1;
+y2 = 5 * sin(pi/20 * (t2 - 3) + 1.5*pi) + 5;
+
+dx2 = gradient(x2, timeStep);
+dy2 = gradient(y2, timeStep);
+
+psi2 = atan2(dy2, dx2);
+vr2 = sqrt(dx2.^2 + dy2.^2);
+
+x_a_r(idx2) = x2;
+y_a_r(idx2) = y2;
+psi_ref(idx2) = psi2;
+v_ref(idx2) = vr2;
+%% calculate reference profile
 
 dx = gradient(x_a_r, t_ref); ddx = gradient(dx, t_ref);
 dy = gradient(y_a_r, t_ref); ddy = gradient(dy, t_ref);
@@ -35,9 +74,6 @@ psi_ref_i = interp1(t_ref, psi_ref, t_ctrl, 'linear')';
 delta_r_profile = interp1(t_ref, delta_ref, t_ctrl, 'linear')';
 k_profile = interp1(t_ref, curvature, t_ctrl, 'linear')';
 v_profile = interp1(t_ref, v_ref, t_ctrl, 'linear')';
-
-plot(t_ctrl,v_profile, 'r-','LineWidth',1.5);
-title('Reference and Actual Trajectory'); xlabel('t [s]'); ylabel('v [m/s]'); axis equal; grid on; legend('v_{profile}');
 
 %% Check if quadprog exists
 if ~exist('quadprog','file')
@@ -203,15 +239,6 @@ for k = 1:Tsim
 
 end
 
-%% tractor-trailer trajectory tracking animation
-
-% figure; hold on; axis equal; grid on; title('Tractor and trailer tracking animation'); xlabel('x [m]'); ylabel('y [m]');
-% for k = 1:Tsim
-%     plot(x_act(1:k), y_act(1:k), 'b-', x_t_act(1:k), y_t_act(1:k), 'r-', 'LineWidth', 1.5);
-%     plot(x_ref, y_ref, 'k--', 'LineWidth', 1.5);
-%     legend('tractor','trailer','ref');
-%     drawnow; pause(0.01);
-% end
 %% tractor-trailer trajectory tracking animation
 figure; hold on; axis equal; grid on;
 title('Tractor and trailer tracking animation'); 
