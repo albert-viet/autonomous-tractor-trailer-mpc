@@ -2,8 +2,8 @@
 clear; close all; clc;
 
 %% --- model parameters ---
-tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;
-
+tau = 0.3; lr1 = 2.9; lt1 = 1.8; m0 = 0.8;  % trailer-1
+lt2 = 2.0;                                  % trailer-2
 %% sampling
 dt = 0.03; umax = 0.52; umin = -umax;
 %% MPC tuning
@@ -307,8 +307,8 @@ function [A, B, W] = linearSys(vr, k, delta_r, psi_ref, psi_t_ref, m0, lr1, lt1,
     cos_delta_squared = cos(delta_r)^2;
     delta_yaw = psi_ref - psi_t_ref;
     e_psi_term = (m0/lr1)*sin(delta_yaw)*tan(delta_r);
-    e1 = (2*vr/lt1)*e_psi_term;
-    e2 = (-2*vr/lt1)*cos(delta_yaw) - e1;
+    e1 = (2*vr/lt1)*(cos(delta_yaw) + e_psi_term);
+    e2 = -e1;
     
     A = [0, vr    , 0      , 0;
          0, 0     , 0      , vr/(lr1*cos_delta_squared);
