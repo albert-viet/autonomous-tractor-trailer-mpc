@@ -106,6 +106,7 @@ dx0 = x_act(1) - xproj_tr; dy0 = y_act(1) - yproj_tr;
 e_y0 = -sin(psi_ref_tr)*dx0 + cos(psi_ref_tr)*dy0;
 e_psi0 = wrapToPi(psi_act(1) - psi_ref_tr);
 e_psi_t0 = wrapToPi(psi_t_act(1) - psi_ref_tl);
+
 x_err = [e_y0; e_psi0; e_psi_t0; delta_act(1)];
 % keep previous projection indices to accelerate next searches (optional)
 last_idx_tr = idx_tr_init;
@@ -305,12 +306,13 @@ function [A, B, W] = linearSys(vr, k, delta_r, psi_ref, psi_t_ref, m0, lr1, lt1,
     % util variables
     cos_delta_squared = cos(delta_r)^2;
     delta_yaw = psi_ref - psi_t_ref;
-    e_psi_term = cos(delta_yaw) + (m0/lr1)*sin(delta_yaw)*tan(delta_r);
+    e_psi_term = (m0/lr1)*sin(delta_yaw)*tan(delta_r);
     e1 = (2*vr/lt1)*e_psi_term;
+    e2 = (-2*vr/lt1)*cos(delta_yaw) - e1;
     
     A = [0, vr    , 0      , 0;
          0, 0     , 0      , vr/(lr1*cos_delta_squared);
-         0, e1    , -e1    , -m0*vr*cos(delta_yaw)/(lr1*lt1*cos_delta_squared);
+         0, e1    , e2    , -m0*vr*cos(delta_yaw)/(lr1*lt1*cos_delta_squared);
          0, 0     , 0      , -1/tau];
     B = [0;0;0;1/tau];
     w1 = (vr/lr1)*(tan(delta_r) - delta_r/cos_delta_squared);
