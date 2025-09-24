@@ -236,7 +236,7 @@ for k = 1:Tsim
     % propagate nonlinear states
     psi_dot = (vr * tan(delta_act(k))) / lr1;
     psi_t_dot = (vr/lt1)*sin(psi_act(k)-psi_t_act(k)) - (m0*vr/(lr1*lt1))*cos(psi_act(k)-psi_t_act(k))*tan(delta_act(k));
-    % off-axle type (m#0)
+    % off-axle type
     % psi_t_t_dot = (vr/lt2)*sin(psi_t_act(k)-psi_t_t_act(k)) - (m0/lt2)*cos(psi_t_act(k)-psi_t_t_act(k))*psi_t_dot;
     % on-axle type (m0=0)
     psi_t_t_dot = (vr/lt2)*sin(psi_t_act(k)-psi_t_t_act(k));
@@ -256,8 +256,8 @@ for k = 1:Tsim
     % trailer-2
     % x_t_t_act(k+1) = x_t_act(k+1) - lt2*cos(psi_t_t_act(k+1)) - lt1*cos(psi_t_act(k+1));
     % y_t_t_act(k+1) = y_t_act(k+1) - lt2*sin(psi_t_t_act(k+1)) - lt1*sin(psi_t_act(k+1));
-    x_t_t_act(k+1) = x_t_act(k+1) - lt2*cos(psi_t_t_act(k+1));
-    y_t_t_act(k+1) = y_t_act(k+1) - lt2*sin(psi_t_t_act(k+1));
+    x_t_t_act(k+1) = x_t_act(k+1) - lt2*cos(psi_t_t_act(k+1)) - lt1*cos(psi_t_act(k+1));
+    y_t_t_act(k+1) = y_t_act(k+1) - lt2*sin(psi_t_t_act(k+1)) - lt1*sin(psi_t_act(k+1));
 
     % update error (Frenet) at next timestep
     % project new positions (tractor & trailer) onto reference
@@ -391,8 +391,7 @@ function [A, B, W] = linearSys(vr, k, k_t, delta_r, psi_ref, psi_t_ref, psi_t_t_
 %          0, e1    , e2    , -m0*vr*cos(delta_yaw)/(lr1*lt1*cos_delta_squared);
 %          0, 0     , 0      , -1/tau];
 
-%   if on-axle types, m0 = 0, off-axle types, m0 # 0. Replace the A(4,5)
-%   term if the pulling model is off-axle type
+%   if on-axle types, m0 = 0, off-axle types, m0 # 0
 %     e3 = (2*vr/lt1)*cos(delta_yaw_t12) + (2*m0/lt2)*sin(delta_yaw_t12)*psi_t_t_ref_dot;          
 %     e4 = (vr*m0*m0*cos(delta_yaw)*cos(delta_yaw_t12))/(lt2*lt1*lr1*cos_delta_squared);
     e3 = (2*vr/lt2)*cos(delta_yaw_t12);
